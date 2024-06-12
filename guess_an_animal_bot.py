@@ -3,9 +3,16 @@ import ast
 from typing import Final
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, Update
+from telegram.ext import CallbackQueryHandler, CallbackContext
+
+def token_reader(): #reads the file with the telegram bot token
+    with open('telegram_bot_token', 'r') as file:
+        content = file.read()
+        return content
 
 #Bot info
-TOKEN: Final = ''
+TOKEN: Final = token_reader()
 BOT_USERNAME: Final = '@guess_an_animal_game_bot'
 
 
@@ -94,19 +101,41 @@ class State:
 
 #commands
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            KeyboardButton("yes"),
+            KeyboardButton("no")
+        ],
+
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=False)
     await update.message.reply_text('Hello, welcome to the Guesser game! I can guess an animal that you think about '
                                     'if you answer my questions.\n'
-                                    f'Think about an animal. Is it {tree_original[0]}?')
+                                    '\n'
+                                    '*RULES*\n'
+                                    '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
+                                    ' because all the information goes to the single database, and false information '
+                                    'can damage the functionality of the program\n'
+                                    '2. _Use ONLY ONE WORD_ for features\n'
+                                    '\n'
+                                    'If you have any questions press /help'
+                                    f'Think about an animal. Is it {tree_original[0]}?', reply_markup= reply_markup)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('This is a machine learning based bot that can guess animals. For this purpose it'
                                     ' will ask you questions. If the animal you thought about is not in the database,'
                                     ' you can add it there.\n'
-                                    'RULES\n'
-                                    '1. ONlY THE TRUTH. Don`t enter non-existent animals with non-existent features,'
+                                    '*RULES*\n'
+                                    '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
                                     ' because all the information goes to the single database, and false information '
-                                    'can damage the program`s functionality\n'
-                                    '2. Use ONLY ONE WORD for features')
+                                    'can damage the functionality of the program\n'
+                                    '2. _Use ONLY ONE WORD_ for features', parse_mode='Markdown')
+
+#button handler
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text=f"{query.data}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_type = update.message.chat.type
@@ -131,6 +160,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CommandHandler('help', help_command))
 
+    app.add_handler(CallbackQueryHandler(button))
 
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
