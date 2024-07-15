@@ -1,51 +1,93 @@
-#imports
+# todo:
+#   - write file with user_ids instances
+#   - put on the server
+#   - comment everything and github
+#   - store tree_original in a google spreadsheet
+#   - use inline keyboard for language choice!
+#   - write prompts into a separate map
+#   - start command into a state
+
+# imports
 import ast
+import asyncio
 from typing import Final
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, Update
 from telegram.ext import CallbackQueryHandler, CallbackContext
 
-def token_reader(): #reads the file with the telegram bot token
+def token_reader():  # reads the file with the telegram bot token
     with open('telegram_bot_token', 'r') as file:
         content = file.read()
         return content
 
-#Bot info
+# Bot info
 TOKEN: Final = token_reader()
 BOT_USERNAME: Final = '@guess_an_animal_game_bot'
 
-
-#message replay: bot's logic is here
 class User_ids:
     def __init__(self):
         self.ids = {}
+
     def get(self, id):
         if not id in self.ids:
             self.ids[id] = State()
         return self.ids[id]
+
+# commands
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [
+            InlineKeyboardButton("English", callback_data='Language chosen: English'),
+            InlineKeyboardButton("Русский", callback_data= "Выбранный язык: Русский")
+        ],
+
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text('Please, choose the language:\n Пожалуйста, выбирете язык:', reply_markup=reply_markup)
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        'This is a machine learning based bot that can guess animals. For this purpose it'
+        ' will ask you questions. If the animal you thought about is not in the database,'
+        ' you can add it there.\n'
+        '*RULES*\n'
+        '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
+        ' because all the information goes to the single database, and false information '
+        'can damage the functionality of the program\n'
+        '2. _Use ONLY ONE WORD_ for features', parse_mode='Markdown')
+
 user_ids = User_ids()
 
 def file_writer():
-    with open('tree_original.txt', 'w') as file:
-        file.write(repr(tree_original))
+    if user_ids.get(id).language == 'russian':
+        file = tree_original_russian
+    elif user_ids.get(id).language == 'english':
+        file = tree_original_english
+    with open(file, 'w') as file:
+        file.write(repr(file))
 
 
-def file_reader():
-    with open('tree_original.txt', 'r') as file:
+def file_reader(language):
+    if language == 'russian': file = 'tree_original_russian'
+    if language == 'english': file = 'tree_original_english'
+    with open(file, 'r') as file:
         tree = file.read()
         return ast.literal_eval(tree)
 
+tree_original_russian = file_reader('russian')
+tree_original_english = file_reader('english')
 
-tree_original = file_reader()
-
+# message replay: bot's logic is here
 class State:
     def __init__(self):  # self = variable we are currently working with
-        global tree_original
-        self.tree = tree_original
+        global tree_original_russian, tree_original_english
+        #self.tree = tree_original
         self.state = 1
         self.new_animal = ''
         self.branch = 0
+        self.language = ('')
 
     def replay(self, text):
         processed = text.lower()
@@ -98,72 +140,42 @@ class State:
             return 'state out of range'
 
 
-
-#commands
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [
-            KeyboardButton("yes"),
-            KeyboardButton("no")
-        ],
-
-    ]
-    reply_markup = ReplyKeyboardMarkup(keyboard, one_time_keyboard=False)
-    await update.message.reply_text('Hello, welcome to the Guesser game! I can guess an animal that you think about '
-                                    'if you answer my questions.\n'
-                                    '\n'
-                                    '*RULES*\n'
-                                    '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
-                                    ' because all the information goes to the single database, and false information '
-                                    'can damage the functionality of the program\n'
-                                    '2. _Use ONLY ONE WORD_ for features\n'
-                                    '\n'
-                                    'If you have any questions press /help'
-                                    f'Think about an animal. Is it {tree_original[0]}?', reply_markup= reply_markup)
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('This is a machine learning based bot that can guess animals. For this purpose it'
-                                    ' will ask you questions. If the animal you thought about is not in the database,'
-                                    ' you can add it there.\n'
-                                    '*RULES*\n'
-                                    '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
-                                    ' because all the information goes to the single database, and false information '
-                                    'can damage the functionality of the program\n'
-                                    '2. _Use ONLY ONE WORD_ for features', parse_mode='Markdown')
-
-#button handler
+# button handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    #user_ids.get(id).language = query.data.lower()
     await query.answer()
     await query.edit_message_text(text=f"{query.data}")
+    if query.data in ['russian']:
+        user_ids.get(id).tree = tree_original_russian
+    elif query.data in ['english']:
+        await context.bot.send_message(chat_id=query.message.chat_id, text='You selected a positive response!')
+        user_ids.get(id).tree = tree_original_english
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message_type = update.message.chat.type
-    text: str = update.message.text       #input
+    text: str = update.message.text  # input
     id = update.message.chat.id
     print(f'User ({id}) in {message_type}: "{text}"')
     response = user_ids.get(id).replay(text)
     print(f'Bot {id}', response)
-
     await update.message.reply_text(response)
 
-
-#error
+# error
 async def error(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f'Update{update} caused error {context.error}')
 
-
-#main function
+# main function
 if __name__ == '__main__':
     print('Bot started')
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CommandHandler('help', help_command))
 
-    app.add_handler(CallbackQueryHandler(button))
-
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
+
+    app.add_handler(CallbackQueryHandler(button))
 
     app.add_error_handler(error)
 
-    app.run_polling(poll_interval=1)   #cycle
+    app.run_polling(poll_interval=1)  # cycle
