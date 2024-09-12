@@ -40,7 +40,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [
             InlineKeyboardButton("English", callback_data='Language chosen: English'),
-            InlineKeyboardButton("Русский", callback_data= "Выбранный язык: Русский")
+            InlineKeyboardButton("Русский", callback_data= 'Выбранный язык: Русский')
         ],
 
     ]
@@ -143,13 +143,14 @@ class State:
 # button handler
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    #user_ids.get(id).language = query.data.lower()
     await query.answer()
     await query.edit_message_text(text=f"{query.data}")
-    if query.data in ['russian']:
+    print (query.data)
+    if query.data == 'Выбранный язык: Русский':
         user_ids.get(id).tree = tree_original_russian
-    elif query.data in ['english']:
-        await context.bot.send_message(chat_id=query.message.chat_id, text='You selected a positive response!')
+        await context.bot.send_message(chat_id=query.message.chat_id, text='Тогда начнём игру. Загадайте животное.\nУ него есть шерсть?')
+    elif query.data == 'Language chosen: English':
+        await context.bot.send_message(chat_id=query.message.chat_id, text='Let`s begin the game then. Think about an animal.\nIs it furry?')
         user_ids.get(id).tree = tree_original_english
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
