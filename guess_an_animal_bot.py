@@ -1,12 +1,12 @@
 # todo:
-#   - write file with user_ids instances
-#   - put on the server
-#   - comment everything and github
+#   - write file with users instances
 #   - store tree_original in a google spreadsheet
-#   - use inline keyboard for language choice!
 #   - write prompts into a separate map
-#   - start command into a state
-
+#   - add yes/no buttons
+# todo:
+#   - put on the server
+#   - make it truly bilingual
+#   - change bot description etc
 # imports
 import ast
 import asyncio
@@ -14,7 +14,7 @@ from typing import Final
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton, Update
-from telegram.ext import CallbackQueryHandler, CallbackContext
+from telegram.ext import CallbackQueryHandler, CallbackContext, filters, MessageHandler, Updater
 
 def token_reader():  # reads the file with the telegram bot token
     with open('telegram_bot_token', 'r') as file:
@@ -24,19 +24,25 @@ def token_reader():  # reads the file with the telegram bot token
 # Bot info
 TOKEN: Final = token_reader()
 BOT_USERNAME: Final = '@guess_an_animal_game_bot'
+# todo: add path
+tree_original_russian = 'tree_original_russian'
+tree_original_english = 'tree_original_english'
 
-class User_ids:
+# Stores all classes User. Allows multiple users to play simultaneously
+# outside the class use users.create_User(*get id somehow with telegram api*)
+class all_Users:
     def __init__(self):
         self.ids = {}
 
-    def get(self, id):
+    def create_User(self, id): #creates a class User for each user
         if not id in self.ids:
-            self.ids[id] = State()
+            self.ids[id] = User()
         return self.ids[id]
+users = all_Users() # makes it shorter
 
 # commands
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE): # starts the bot and allows it to choose language
     keyboard = [
         [
             InlineKeyboardButton("English", callback_data='Language chosen: English'),
@@ -45,120 +51,149 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     await update.message.reply_text('Please, choose the language:\n Пожалуйста, выбирете язык:', reply_markup=reply_markup)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE): #about info
     await update.message.reply_text(
-        'This is a machine learning based bot that can guess animals. For this purpose it'
-        ' will ask you questions. If the animal you thought about is not in the database,'
-        ' you can add it there.\n'
-        '*RULES*\n'
-        '1. _ONlY THE TRUTH_. Do not enter non-existent animals with non-existent features,'
+        'This is a machine learning based bot that can guess animals\\. For this purpose it'
+        ' will ask you questions\\. If the animal you thought about is not in the database,'
+        ' you can add it there\\.\n'
+        '\\*RULES\\*\n'
+        '1\\. \\_ONlY THE TRUTH\\_\\. Do not enter non\\-existent animals with non\\-existent features,'
         ' because all the information goes to the single database, and false information '
         'can damage the functionality of the program\n'
-        '2. _Use ONLY ONE WORD_ for features', parse_mode='Markdown')
+        '2\\. \\_Use ONLY ONE WORD\\_ for features\n\n'
+        'If you have any problems, questions, or you\'ve noticed any issues in the program you can text \\@l\\_asinus\n\n'
+        'Эта программа основанна на машинном обучении, и она может угадывать животных, для чего будет задавать вопросы\\.'
+        'Если вы загадаете животное, которого нет в базе данных, вы можете добавить его туда\n'
+        '\\*Правила\\*\n'
+        '1\\. \\_ТОЛЬКО ПРАВДА\\_ не вводите несуществующих животных с несуществующими свойствами, так как это будет засорять'
+        'базу данных\n'
+        '2\\. \\_ИСПОЛЬЗУЙТЕ ТОЛЬКО ОДНО СЛОВО ДЛЯ ХАРАКТЕРИСТИК животных\\_\n\n'
+        'Если у вас есть проблемы или вопросы связанные с игрой, пожалуйста задавайте их по \\@l\\_asinus', parse_mode='MarkdownV2')
 
-user_ids = User_ids()
-
-def file_writer():
-    if user_ids.get(id).language == 'russian':
+def file_reader(language): #reads the required file with the tree of assigned language. gets language as an input
+    if language == 'russian':
         file = tree_original_russian
-    elif user_ids.get(id).language == 'english':
+    if language == 'english':
         file = tree_original_english
-    with open(file, 'w') as file:
-        file.write(repr(file))
-
-
-def file_reader(language):
-    if language == 'russian': file = 'tree_original_russian'
-    if language == 'english': file = 'tree_original_english'
     with open(file, 'r') as file:
-        tree = file.read()
-        return ast.literal_eval(tree)
+        return ast.literal_eval(file.read())
 
-tree_original_russian = file_reader('russian')
-tree_original_english = file_reader('english')
-
-# message replay: bot's logic is here
-class State:
+class User: # stores info for each user
     def __init__(self):  # self = variable we are currently working with
-        global tree_original_russian, tree_original_english
-        #self.tree = tree_original
-        self.state = 1
-        self.new_animal = ''
-        self.branch = 0
-        self.language = ('')
+        self.state = 1 #state of the game, could ve from 0 to 4. defines the bot's next action
+        self.branch = 0 #could be either 1 or 2. one is for user's answer yes, 2 is for the answer no
+        self.tree_original = None # data that is read from the tree_original_language file
+        self.language = None # language, required for work of file_writer
 
-    def replay(self, text):
+    def file_writer(self, language):  # writes the file if a user adds a new animal into the database
+        if language == 'russian':
+            file_name = tree_original_russian
+        if language == 'english':
+            file_name = tree_original_english
+        with open(file_name, 'w') as file:
+            file.write(str(self.tree_original))
+
+    def replay(self, text): #bot's logic is here
         processed = text.lower()
-        if self.state == 0:
+        if self.state == 0: #first question
             self.state = 1
             return f'Think about an animal. Is it {self.tree[0]}?'
-        if self.state == 1:
+        if self.state == 1: #repeating question. navigates in the tree until the final brunch
             if 'yes' in processed:
                 self.branch = 1
             elif 'no' in processed:
                 self.branch = 2
             else:
-                return 'I haven`t understand you'
-            if isinstance(self.tree[self.branch], list):
+                return 'I did not understand you'
+            if isinstance(self.tree[self.branch], list): #returns to the beginning of the state 1
                 self.tree = self.tree[self.branch]
                 self.state = 1
                 return f'Is it {self.tree[0]}?'
             elif isinstance(self.tree[self.branch], str):
-                self.state = 2
+                self.state = 2 #changes state to 2
                 return f'Is it a {self.tree[self.branch]}?'
             else:
                 print('error')
                 return 'ERROR'
 
-        elif self.state == 2:
+        elif self.state == 2: #asks if the guess is correct
             if 'yes' in processed:
-                self.state = 0
-                self.tree = tree_original
+                self.state = 0 #if it guesses the animal correctly it restarts the game
+                self.tree = self.tree_original
                 return "I Won! Do you want play again?"
             elif 'no' in processed:
-                self.state = 3
+                self.state = 3 #if the guess is wrong, it changes state to 3
                 return 'I lost! What is it?'
             else:
                 return 'ERROR'
 
-        elif self.state == 3:
+        elif self.state == 3: # gets info about the new animals' new feature
             self.new_animal = processed
             old_animal = self.tree[self.branch]
             self.state = 4
             return f'What is the feature that {self.new_animal} has and {old_animal} doesn`t have?'
 
-        elif self.state == 4:
+        elif self.state == 4: #writes new info into the tree_original_language and restarts the game
             old_animal = self.tree[self.branch]
             self.tree[self.branch] = [processed, self.new_animal, old_animal]
-            file_writer()
+            self.file_writer(self.language)
             self.state = 0
-            self.tree = tree_original
+            self.tree = self.tree_original
             return 'Lets play again!'
-        else:
+        else: # error handling
             return 'state out of range'
 
-
 # button handler
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(text=f"{query.data}")
+# todo: deal with username
+async def choose_language(update: Update, context: ContextTypes.DEFAULT_TYPE): #handles the response to the language choice buttons from start_command and writes the about message
+    query = update.callback_query #shortening
+    id = query.from_user.id #shortening
+    await query.answer() #waits until it gets the answer
+    await query.edit_message_text(text=f"{query.data}") # edits message depending on the language choice
     print (query.data)
     if query.data == 'Выбранный язык: Русский':
-        user_ids.get(id).tree = tree_original_russian
-        await context.bot.send_message(chat_id=query.message.chat_id, text='Тогда начнём игру. Загадайте животное.\nУ него есть шерсть?')
+        users.create_User(id).language = 'russian'
+        users.create_User(id).tree_original = file_reader(users.create_User(id).language) #reads the tree_original_language file depending on the language choice
+        users.create_User(id).tree = users.create_User(id).tree_original #creates a User class inside all_Users
+        await context.bot.send_message(chat_id=query.message.chat_id, #russian about message
+                                       text='Эта программа основанна на машинном обучении, и она может угадывать'
+                                            'животных, для чего будет задавать вопросы\\.'
+                                            'Если вы загадаете животное, которого нет в базе данных,'
+                                            'вы можете добавить его туда\n'
+                                            '\\*Правила\\*\n'
+                                            '1\\. \\_ТОЛЬКО ПРАВДА\\_\\. не вводите несуществующих животных с несуществующими'
+                                            ' свойствами, так как это будет засорять'
+                                            'базу данных и может испортить работу программы\\.\n'
+                                            '2\\. \\_ИСПОЛЬЗУЙТЕ ТОЛЬКО ОДНО СЛОВО ДЛЯ ХАРАКТЕРИСТИК\\_ животных\n\n'
+                                            'Если у вас есть проблемы или вопросы связанные с игрой, пожалуйста'
+                                            ' задавайте их по \\@l\\_asinus '
+                                            'Тогда начнём игру\\. Загадайте животное\\.\nУ него есть шерсть?', parse_mode='MarkdownV2')
     elif query.data == 'Language chosen: English':
-        await context.bot.send_message(chat_id=query.message.chat_id, text='Let`s begin the game then. Think about an animal.\nIs it furry?')
-        user_ids.get(id).tree = tree_original_english
+        users.create_User(id).language = 'english'
+        users.create_User(id).tree_original = file_reader(users.create_User(id).language)
+        users.create_User(id).tree = users.create_User(id).tree_original
+        await context.bot.send_message(chat_id=query.message.chat_id, # english about message
+                                       text= 'This is a machine learning based bot that can guess animals\\. For this purpose it'
+        ' will ask you questions\\. If the animal you thought about is not in the database,'
+        ' you can add it there\\.\n'
+        '\\*RULES\\*\n'
+        '1\\. \\_ONlY THE TRUTH\\_\\. Do not enter non\\-existent animals with non\\-existent features,'
+        ' because all the information goes to the single database, and false information '
+        'can damage the functionality of the program\n'
+        '2\\.\\_Use ONLY ONE WORD\\_ for features\n\n'
+        'If you have any problems, questions, or you\'ve noticed any issues in the program you can text \\@l\\_asinus\n\n'
+        'Let\'s begin the game then\\. Think about an animal\\.'
+        '\nIs it furry?', parse_mode='MarkdownV2')
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE): #writes the content of bot and user messaging in the terminal
     message_type = update.message.chat.type
     text: str = update.message.text  # input
     id = update.message.chat.id
     print(f'User ({id}) in {message_type}: "{text}"')
-    response = user_ids.get(id).replay(text)
+    response = users.create_User(id).replay(text)
     print(f'Bot {id}', response)
     await update.message.reply_text(response)
 
@@ -173,9 +208,11 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('start', start_command))
     app.add_handler(CommandHandler('help', help_command))
 
+    #app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, button))
+
     app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
-    app.add_handler(CallbackQueryHandler(button))
+    app.add_handler(CallbackQueryHandler(choose_language))
 
     app.add_error_handler(error)
 
