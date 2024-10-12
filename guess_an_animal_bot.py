@@ -3,9 +3,10 @@
 #   - store tree_original in a google spreadsheet
 #   - write prompts into a separate map
 #   - add yes/no buttons
+#   - auto start
+#   - make tests
 # todo:
 #   - put on the server
-#   - write tests
 # imports
 import ast
 import asyncio
